@@ -3,15 +3,15 @@ __pycache__/
 *.pyc
 
 # Ignore downloaded datasets
-datasets/nyc_tlc/yellow/
+datasets/nyc_tlc/yellow/**
 
-# Ignore files in jars
-jars/
-# Except .gitkeep in 'jars'
-# !/jars/.gitkeep
+/jars/**
+!/jars/.gitkeep
 
-# Ignore MinIO data (persistent volume)
-minio-data/
+/minio-data/**
+!/minio-data/.gitkeep
+
+/.git.bak/  
 
 # Ignore PostgreSQL / Hive Metastore data (if any in the future)
 postgres-data/
