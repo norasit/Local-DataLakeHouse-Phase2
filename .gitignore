@@ -1,0 +1,26 @@
+# Ignore Python cache (if any)
+__pycache__/
+*.pyc
+
+# Ignore downloaded datasets
+datasets/nyc_tlc/yellow/
+
+# Ignore files in jars
+jars/
+# Except .gitkeep in 'jars'
+# !/jars/.gitkeep
+
+# Ignore MinIO data (persistent volume)
+minio-data/
+
+# Ignore PostgreSQL / Hive Metastore data (if any in the future)
+postgres-data/
+mariadb-data/
+
+# Ignore temporary files
+*.log
+*.tmp
+
+# Ignore OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,94 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    hostname: postgres
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: metastore_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d metastore_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [trino-network]
+
+  hive-metastore:
+    image: apache/hive:standalone-metastore-4.1.0
+    hostname: hive-metastore
+    ports: ["9083:9083"]
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+
+      # ให้ HMS เห็น JAR ครบ (ชื่อไฟล์คงที่ตามสคริปต์)
+      HIVE_AUX_JARS_PATH: /opt/hive/lib/postgres.jar:/opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
+      HADOOP_CLASSPATH:   /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
+      METASTORE_AUX_JARS_PATH: /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
+
+    volumes:
+      - ./metastore_conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml:ro
+      - ./jars/postgresql-42.7.3.jar:/opt/hive/lib/postgres.jar:ro
+      - ./jars/hadoop-aws.jar:/opt/hive/lib/hadoop-aws.jar:ro
+      - ./jars/aws-sdk-bundle.jar:/opt/hive/lib/aws-sdk-bundle.jar:ro
+
+    # init schema ด้วย Postgres แล้วค่อยสตาร์ท thrift server (idempotent)
+    command: >
+      bash -lc "schematool -dbType postgres -initOrUpgradeSchema || true &&
+                /opt/hive/bin/hive --service metastore"
+
+    # ให้ Compose รอจนพอร์ต 9083 ตอบก่อนปล่อย Trino ขึ้น
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/9083'"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [trino-network]
+
+  minio:
+    image: minio/minio:RELEASE.2025-07-18T21-56-31Z
+    hostname: minio
+    ports: ["9000:9000","9001:9001"]
+    volumes:
+      - ./minio-data:/data
+    environment:
+      MINIO_ROOT_USER: test
+      MINIO_ROOT_PASSWORD: test12334567
+    command: server /data --console-address ":9001"
+    networks: [trino-network]
+
+  minio-mc:
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    depends_on: [minio]
+    entrypoint: >
+      /bin/sh -c "
+        until nc -z minio 9000; do echo 'waiting for minio...'; sleep 1; done;
+        mc alias set localminio http://minio:9000 test test12334567 &&
+        mc mb -p localminio/lakehouse-data || true &&
+        echo 'Bucket lakehouse-data ready';
+      "
+    networks: [trino-network]
+
+  trino:
+    image: trinodb/trino:475
+    hostname: trino_container
+    ports: ["8080:8080"]
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks: [trino-network]
+
+networks:
+  trino-network:
+    driver: bridge
