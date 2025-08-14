@@ -1,81 +1,65 @@
 <configuration>
 
-    <!-- HMS endpoint สำหรับไคลเอนต์ -->
-    <property>
-        <name>metastore.thrift.uris</name>
-        <value>thrift://hive-metastore:9083</value>
-        <description>Thrift URI for the remote metastore. Used by metastore client to connect to remote metastore.</description>
-    </property>
+  <!-- Thrift endpoint (ตัวนี้มี/ไม่มีไม่เป็นไรสำหรับตัว server) -->
+  <property>
+    <name>metastore.thrift.uris</name>
+    <value>thrift://hive-metastore:9083</value>
+  </property>
 
-    <property>
-        <name>metastore.task.threads.always</name>
-        <value>org.apache.hadoop.hive.metastore.events.EventCleanerTask,org.apache.hadoop.hive.metastore.MaterializationsCacheCleanerTask</value>
-    </property>
+  <!-- JDBC (PostgreSQL) -->
+  <property>
+    <name>javax.jdo.option.ConnectionDriverName</name>
+    <value>org.postgresql.Driver</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionURL</name>
+    <value>jdbc:postgresql://postgres:5432/metastore_db</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionUserName</name>
+    <value>admin</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionPassword</name>
+    <value>admin</value>
+  </property>
 
-    <property>
-        <name>metastore.expression.proxy</name>
-        <value>org.apache.hadoop.hive.metastore.DefaultPartitionExpressionProxy</value>
-    </property>
+  <!-- ให้ HMS เก็บของใน S3A -->
+  <property>
+    <name>hive.metastore.warehouse.dir</name>
+    <value>s3a://lakehouse-data/warehouse</value>
+  </property>
 
-    <!-- JDBC (PostgreSQL) -->
-    <property>
-        <name>javax.jdo.option.ConnectionDriverName</name>
-        <value>org.postgresql.Driver</value>
-    </property>
-    <property>
-        <name>javax.jdo.option.ConnectionURL</name>
-        <value>jdbc:postgresql://postgres:5432/metastore_db</value>
-    </property>
-    <property>
-        <name>javax.jdo.option.ConnectionUserName</name>
-        <value>admin</value>
-    </property>
-    <property>
-        <name>javax.jdo.option.ConnectionPassword</name>
-        <value>admin</value>
-    </property>
+  <!-- เปิด S3A ให้ Hadoop รู้จัก -->
+  <property>
+    <name>fs.s3a.impl</name>
+    <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+  </property>
 
-    <!-- ตั้ง default warehouse ให้ HMS (ใช้สกีม่า s3:// เพื่อให้ Trino native S3 ใช้ได้ยาว ๆ) -->
-    <property>
-        <name>hive.metastore.warehouse.dir</name>
-        <value>s3://lakehouse-data/warehouse</value>
-    </property>
-
-    <!-- Map สกีม่า s3:// ให้ใช้ S3AFileSystem ฝั่ง Hadoop -->
-    <property>
-        <name>fs.s3.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-    </property>
-
-    <!-- S3A (MinIO) -->
-    <property>
-        <name>fs.s3a.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-    </property>
-    <property>
-        <name>fs.s3a.access.key</name>
-        <value>test</value>
-    </property>
-    <property>
-        <name>fs.s3a.secret.key</name>
-        <value>test12334567</value>
-    </property>
-    <property>
-        <name>fs.s3a.endpoint</name>
-        <value>http://minio:9000</value>
-    </property>
-    <property>
-        <name>fs.s3a.path.style.access</name>
-        <value>true</value>
-    </property>
-    <property>
-        <name>fs.s3a.connection.ssl.enabled</name>
-        <value>false</value>
-    </property>
-
-    <property>
-        <name>fs.s3a.aws.credentials.provider</name>
-        <value>org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider</value>
-    </property>
+  <!-- ตั้งค่า MinIO สำหรับ S3A -->
+  <property>
+    <name>fs.s3a.endpoint</name>
+    <value>http://minio:9000</value>
+  </property>
+  <property>
+    <name>fs.s3a.access.key</name>
+    <value>test</value>
+  </property>
+  <property>
+    <name>fs.s3a.secret.key</name>
+    <value>test12334567</value>
+  </property>
+  <property>
+    <name>fs.s3a.path.style.access</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>fs.s3a.connection.ssl.enabled</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>fs.s3a.aws.credentials.provider</name>
+    <value>org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider</value>
+  </property>
 
 </configuration>
