@@ -88,17 +88,26 @@ services:
     image: minio/mc:RELEASE.2025-07-21T05-28-08Z
     depends_on: [minio]
     entrypoint: >
-      /bin/sh -c "
-        set -e
-        until nc -z minio 9000; do echo 'waiting for minio...'; sleep 1; done;
-        mc alias set localminio http://minio:9000 test test12334567;
-        # สร้างบัคเก็ต (ถ้ามีอยู่แล้วไม่เป็นไร)
-        mc mb -p localminio/lakehouse-data || true;
-        # สร้าง prefix ที่ HMS/Trino ต้องใช้
-        mc mkdir --parents localminio/lakehouse-data/warehouse || true;
-        mc mkdir --parents localminio/lakehouse-data/raw       || true;
-        echo 'Bucket + prefixes ready: lakehouse-data/{warehouse,raw}';
-      "
+      /bin/sh -eu -c '
+        mc alias set localminio http://minio:9000 test test12334567
+
+        # รอจน S3 API ตอบ
+        until mc ls localminio >/dev/null 2>&1; do
+          echo "waiting for minio S3 API..."
+          sleep 1
+        done
+
+        # สร้าง bucket (ถ้ามีอยู่แล้วไม่เป็นไร)
+        mc mb -p localminio/lakehouse-data || true
+
+        # สร้าง prefix โดยวางไฟล์ .keep ไว้ (แทน mkdir)
+        for p in warehouse raw; do
+          mc stat localminio/lakehouse-data/$$p >/dev/null 2>&1 || \
+            echo "" | mc pipe localminio/lakehouse-data/$$p/.keep
+        done
+
+        echo "Bucket + prefixes ready: lakehouse-data/{warehouse,raw}"
+      '
     networks: [trino-network]
 
   trino:
@@ -107,6 +116,7 @@ services:
     ports: ["8080:8080"]
     volumes:
       - ./trino/catalog:/etc/trino/catalog
+      - ./trino/etc/jvm.config:/etc/trino/jvm.config:ro
     depends_on:
       hive-metastore:
         condition: service_healthy
