@@ -1,12 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-
-  <!-- Thrift endpoint (ตัวนี้มี/ไม่มีไม่เป็นไรสำหรับตัว server) -->
+  <!-- จุดเชื่อมต่อ Hive Metastore -->
   <property>
     <name>metastore.thrift.uris</name>
     <value>thrift://hive-metastore:9083</value>
   </property>
 
-  <!-- JDBC (PostgreSQL) -->
+  <!-- โฟลเดอร์ warehouse (ใช้สกีมา s3a: ให้ตรงกับ core-site.xml) -->
+  <property>
+    <name>hive.metastore.warehouse.dir</name>
+    <value>s3a://lakehouse-data/warehouse</value>
+  </property>
+
+  <!-- ฐานข้อมูล HMS (PostgreSQL) -->
   <property>
     <name>javax.jdo.option.ConnectionDriverName</name>
     <value>org.postgresql.Driver</value>
@@ -24,42 +30,9 @@
     <value>admin</value>
   </property>
 
-  <!-- ให้ HMS เก็บของใน S3A -->
+  <!-- ค่าทั่วไปของ HMS -->
   <property>
-    <name>hive.metastore.warehouse.dir</name>
-    <value>s3a://lakehouse-data/warehouse</value>
+    <name>metastore.expression.proxy</name>
+    <value>org.apache.hadoop.hive.metastore.DefaultPartitionExpressionProxy</value>
   </property>
-
-  <!-- เปิด S3A ให้ Hadoop รู้จัก -->
-  <property>
-    <name>fs.s3a.impl</name>
-    <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-  </property>
-
-  <!-- ตั้งค่า MinIO สำหรับ S3A -->
-  <property>
-    <name>fs.s3a.endpoint</name>
-    <value>http://minio:9000</value>
-  </property>
-  <property>
-    <name>fs.s3a.access.key</name>
-    <value>test</value>
-  </property>
-  <property>
-    <name>fs.s3a.secret.key</name>
-    <value>test12334567</value>
-  </property>
-  <property>
-    <name>fs.s3a.path.style.access</name>
-    <value>true</value>
-  </property>
-  <property>
-    <name>fs.s3a.connection.ssl.enabled</name>
-    <value>false</value>
-  </property>
-  <property>
-    <name>fs.s3a.aws.credentials.provider</name>
-    <value>org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider</value>
-  </property>
-
 </configuration>

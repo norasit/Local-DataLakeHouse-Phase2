@@ -22,27 +22,41 @@ services:
     image: apache/hive:standalone-metastore-4.1.0
     hostname: hive-metastore
     ports: ["9083:9083"]
+
     environment:
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
 
-      # ให้ HMS เห็น JAR ครบ (ชื่อไฟล์คงที่ตามสคริปต์)
+      # ให้ Hive/Hadoop ในคอนเทนเนอร์อ่านไฟล์คอนฟิกที่เราเมานท์
+      HIVE_CONF_DIR: /opt/hive/conf
+      HADOOP_CONF_DIR: /opt/hive/conf
+
+      # Fallback ให้ AWS SDK มองเห็นคีย์แน่ ๆ (ช่วยเคสที่ core-site ไม่ถูกโหลด)
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test12334567
+      AWS_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+
+      # ให้ HMS เห็น JAR สำหรับ S3A + Postgres ครบ
       HIVE_AUX_JARS_PATH: /opt/hive/lib/postgres.jar:/opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
       HADOOP_CLASSPATH:   /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
       METASTORE_AUX_JARS_PATH: /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
 
     volumes:
       - ./metastore_conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml:ro
+      - ./metastore_conf/core-site.xml:/opt/hive/conf/core-site.xml:ro
+      # เมานท์ซ้ำเข้า path มาตรฐานของ Hadoop ด้วย (กันกรณี Hive ไม่มอง HADOOP_CONF_DIR)
+      - ./metastore_conf/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+
       - ./jars/postgresql-42.7.3.jar:/opt/hive/lib/postgres.jar:ro
       - ./jars/hadoop-aws.jar:/opt/hive/lib/hadoop-aws.jar:ro
       - ./jars/aws-sdk-bundle.jar:/opt/hive/lib/aws-sdk-bundle.jar:ro
 
-    # init schema ด้วย Postgres แล้วค่อยสตาร์ท thrift server (idempotent)
+    # init/upgrade schema (idempotent) แล้วค่อยเปิด thrift metastore
     command: >
       bash -lc "schematool -dbType postgres -initOrUpgradeSchema || true &&
                 /opt/hive/bin/hive --service metastore"
 
-    # ให้ Compose รอจนพอร์ต 9083 ตอบก่อนปล่อย Trino ขึ้น
     healthcheck:
       test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/9083'"]
       interval: 5s
@@ -52,6 +66,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # ไม่ต้องรอ ready แค่ให้ MinIO start ก่อนพอ
+      minio:
+        condition: service_started
+
     networks: [trino-network]
 
   minio:
@@ -71,10 +89,15 @@ services:
     depends_on: [minio]
     entrypoint: >
       /bin/sh -c "
+        set -e
         until nc -z minio 9000; do echo 'waiting for minio...'; sleep 1; done;
-        mc alias set localminio http://minio:9000 test test12334567 &&
-        mc mb -p localminio/lakehouse-data || true &&
-        echo 'Bucket lakehouse-data ready';
+        mc alias set localminio http://minio:9000 test test12334567;
+        # สร้างบัคเก็ต (ถ้ามีอยู่แล้วไม่เป็นไร)
+        mc mb -p localminio/lakehouse-data || true;
+        # สร้าง prefix ที่ HMS/Trino ต้องใช้
+        mc mkdir --parents localminio/lakehouse-data/warehouse || true;
+        mc mkdir --parents localminio/lakehouse-data/raw       || true;
+        echo 'Bucket + prefixes ready: lakehouse-data/{warehouse,raw}';
       "
     networks: [trino-network]
 
