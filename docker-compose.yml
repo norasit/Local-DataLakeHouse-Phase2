@@ -86,26 +86,23 @@ services:
 
   minio-mc:
     image: minio/mc:RELEASE.2025-07-21T05-28-08Z
-    depends_on: [minio]
+    depends_on:
+      minio:
+        condition: service_started
+    restart: on-failure
+    environment:
+      MINIO_ROOT_USER: test
+      MINIO_ROOT_PASSWORD: test12334567
     entrypoint: >
       /bin/sh -eu -c '
-        mc alias set localminio http://minio:9000 test test12334567
-
-        # รอจน S3 API ตอบ
-        until mc ls localminio >/dev/null 2>&1; do
-          echo "waiting for minio S3 API..."
-          sleep 1
+        until mc alias set localminio http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          echo "waiting for MinIO..."; sleep 2;
         done
-
-        # สร้าง bucket (ถ้ามีอยู่แล้วไม่เป็นไร)
         mc mb -p localminio/lakehouse-data || true
-
-        # สร้าง prefix โดยวางไฟล์ .keep ไว้ (แทน mkdir)
         for p in warehouse raw; do
-          mc stat localminio/lakehouse-data/$$p >/dev/null 2>&1 || \
-            echo "" | mc pipe localminio/lakehouse-data/$$p/.keep
+          mc stat localminio/lakehouse-data/$${p} >/dev/null 2>&1 || \
+            echo "" | mc pipe localminio/lakehouse-data/$${p}/.keep
         done
-
         echo "Bucket + prefixes ready: lakehouse-data/{warehouse,raw}"
       '
     networks: [trino-network]
