@@ -69,6 +69,18 @@ Load partitions from the folder layout (year=YYYY/month=MM/...):
 CALL hive.system.sync_partition_metadata('raw', 'nyc_yellow', 'FULL');
 ```
 
+**Schema source & notes**
+The column names and data types in the hive.raw.nyc_yellow DDL are based on the **official NYC TLC Yellow Trip Records data dictionary**:
+- Data dictionary (PDF): https://www.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf
+**Mapping notes (Trino ↔︎ TLC fields):**
+- The TLC dictionary uses ```CamelCase``` (e.g., ```VendorID```). Trino is case-insensitive for unquoted identifiers, so ```vendorid``` is equivalent.
+- Timestamps are stored in Parquet with microsecond precision; using ```TIMESTAMP``` in Trino is appropriate.
+- Integer-like fields may appear as 32-bit or 64-bit in different monthly Parquet files. Using ```INTEGER``` or ```BIGINT``` as in the DDL is safe:
+   - ```passenger_count```, ```ratecodeid``` often materialize as 64-bit → we use ```BIGINT```.
+   - ```pulocationid```, ```dolocationid```, ```payment_type``` are commonly 32-bit → we use INTEGER.
+- Monetary fields are modeled as ```DOUBLE``` here for simplicity (the TLC files are floats). If you need exactness, consider ```DECIMAL(10,2)``` and cast on read.
+- Schema evolution: some columns (e.g., ```airport_fee```) don’t exist in older months. Trino will return ```NULL``` for missing columns in those partitions, which is expected.
+
 ---
 
 ## 4) Inspect the Hive table

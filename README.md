@@ -12,7 +12,7 @@ Target use case: learn the end-to-end flow from raw Parquet files → Hive exter
 ## Dataset
 **NYC Taxi Trip Records – Yellow Taxi**  
 **Period:** January 2024 – June 2025  
-**Source:** [NYC TLC Trip Record Data](https://www.nyc.gov/assets/tlc/pages/about/tlc_trip_record_data.html)
+**Source:** [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
 
 Raw Parquet files will live in s3://lakehouse-data/raw/nyc/yellow/year=<YYYY>/month=<MM>/….
 
