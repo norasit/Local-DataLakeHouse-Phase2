@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <property>
+    <name>hive.metastore.uris</name>
+    <value>thrift://hive-metastore:9083</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionDriverName</name>
+    <value>org.postgresql.Driver</value>
+  </property>
+  <!-- ค่าอื่น ๆ ไม่จำเป็นต้องใส่ ถ้า HMS ฝั่งเซิร์ฟเวอร์ตั้งไว้แล้ว -->
+</configuration>
