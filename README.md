@@ -5,7 +5,12 @@ This project sets up a **Local Data Lakehouse** environment using:
 - **Trino** 476 (SQL query engine)
 - **Apache Iceberg** (table format)
 - **Hive Metastore** (metadata service for Hive & Iceberg in Trino)
-Target use case: learn the end-to-end flow from raw Parquet files → Hive external table → managed Iceberg table.
+- **Apache Spark** (data processing engine for Iceberg maintenance & transformation)
+- **Apache Airflow** (workflow orchestration and scheduling)
+
+Target use case:  
+- Learn the end-to-end flow from raw Parquet files → Hive external table → managed Iceberg table.  
+- Extend the lakehouse with Spark for Iceberg maintenance/ETL and Airflow for orchestration & scheduling.
 
 ---
 
@@ -155,6 +160,19 @@ Reset / clean up:
 DROP TABLE IF EXISTS iceberg.lh.nyc_yellow;   -- removes Iceberg data+metadata under warehouse
 DROP TABLE IF EXISTS hive.raw.nyc_yellow;     -- removes only metadata; raw files remain
 ```
+
+---
+
+## 8) Get Iceberg Spark runtime JAR (for Spark integration with Iceberg)
+
+If you plan to run **Spark** alongside Trino for data processing or maintenance jobs (e.g. compaction, snapshot expiration),  
+you need the **Iceberg Spark runtime JAR**.
+
+Run the helper script:
+
+```bash
+chmod +x scripts/get_iceberg_spark_jar.sh
+scripts/get_iceberg_spark_jar.sh
 
 ---
 
