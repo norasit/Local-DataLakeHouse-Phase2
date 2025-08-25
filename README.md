@@ -173,7 +173,7 @@ Run the helper script:
 ```bash
 chmod +x scripts/get_iceberg_spark_jar.sh
 scripts/get_iceberg_spark_jar.sh
-
+```
 ---
 
 **Troubleshooting**
