@@ -1,4 +1,4 @@
-# Local Data Lakehouse (Phase 1)
+# Local Data Lakehouse (Phase 2)
 
 This project sets up a **Local Data Lakehouse** environment using:
 - **MinIO** (S3-compatible object storage)
@@ -62,6 +62,20 @@ scripts/get_hms_s3a_jars.sh
 This downloads the versioned jars and also writes stable filenames in ./jars/
 (hadoop-aws.jar, aws-sdk-bundle.jar) so the Docker volumes do not change when you
 bump versions.
+
+---
+
+## 3A) Get Iceberg Spark runtime JAR (for Spark integration with Iceberg)
+
+If you plan to run **Spark** alongside Trino for data processing or maintenance jobs (e.g. compaction, snapshot expiration),  
+you need the **Iceberg Spark runtime JAR**.
+
+Run the helper script:
+
+```bash
+chmod +x scripts/get_iceberg_spark_jar.sh
+scripts/get_iceberg_spark_jar.sh
+```
 
 ---
 

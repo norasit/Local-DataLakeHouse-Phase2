@@ -2,20 +2,22 @@
 set -euo pipefail
 
 # ===== Versions (override ได้ตอนรัน) =====
-HADOOP_VER="${HADOOP_VER:-3.4.1}"
-AWS_BUNDLE_VER="${AWS_BUNDLE_VER:-2.24.6}"
+# ใช้ Hadoop AWS 3.3.4 ให้ตรงชุด 3.3.x
+HADOOP_VER="${HADOOP_VER:-3.3.4}"
+# ใช้ AWS SDK v1 (ไม่ใช่ v2) ให้เข้ากับ hadoop-aws 3.x
+AWS_BUNDLE_VER="${AWS_BUNDLE_VER:-1.12.262}"
 
 # ===== Targets =====
 OUT_DIR="${OUT_DIR:-./jars}"
 SRC_HADOOP_AWS_JAR="hadoop-aws-${HADOOP_VER}.jar"
-SRC_AWS_BUNDLE_JAR="bundle-${AWS_BUNDLE_VER}.jar"
+SRC_AWS_BUNDLE_JAR="aws-java-sdk-bundle-${AWS_BUNDLE_VER}.jar"
 
 # ชื่อ "คงที่" สำหรับใช้กับ docker-compose
 DST_HADOOP_AWS_JAR="hadoop-aws.jar"
 DST_AWS_BUNDLE_JAR="aws-sdk-bundle.jar"
 
 HADOOP_AWS_URL="https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/${HADOOP_VER}/${SRC_HADOOP_AWS_JAR}"
-AWS_BUNDLE_URL="https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/${AWS_BUNDLE_VER}/${SRC_AWS_BUNDLE_JAR}"
+AWS_BUNDLE_URL="https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/${AWS_BUNDLE_VER}/${SRC_AWS_BUNDLE_JAR}"
 
 mkdir -p "${OUT_DIR}"
 
@@ -59,6 +61,7 @@ cat <<'EOF'
 
 Next steps (docker-compose -> hive-metastore):
 
+# ใช้คู่กับ HMS (Hive Metastore) เท่านั้น
 environment:
   SERVICE_NAME: metastore
   DB_DRIVER: postgres
@@ -75,9 +78,8 @@ volumes:
 Then:
   docker compose restart hive-metastore
 
-In Trino (Native S3):
-  CREATE SCHEMA iceberg.lh;
-# or
-# CREATE SCHEMA iceberg.lh WITH (location='s3://lakehouse-data/iceberg');
+Notes:
+- สำหรับ Spark: ไม่ต้อง mount aws-sdk-bundle.jar (Spark มีมาแล้ว); mount เฉพาะ hadoop-aws.jar (3.3.4) ก็พอ
+- ถ้าต้องเปลี่ยนเวอร์ชัน ให้ export HADOOP_VER / AWS_BUNDLE_VER ก่อนรันสคริปต์
 
 EOF
