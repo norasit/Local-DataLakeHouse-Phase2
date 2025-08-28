@@ -52,39 +52,56 @@ services:
     environment:
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
-
+      # ให้ Hive อ่านไฟล์คอนฟิกจาก /opt/hive/conf
       HIVE_CONF_DIR: /opt/hive/conf
       HADOOP_CONF_DIR: /opt/hive/conf
 
+      # (ถ้าต้องใช้ MinIO/S3A)
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test12334567
       AWS_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
 
-      HIVE_AUX_JARS_PATH: /opt/hive/lib/postgres.jar:/opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
-      HADOOP_CLASSPATH:   /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
+      # ใส่ JAR ที่จำเป็นให้ metastore เห็น
+      # - hadoop-aws-3.3.4.jar  (ต้อง match Hadoop ของ image: 3.3.4)
+      # - aws-java-sdk-bundle-1.12.772.jar (SDK v1 ที่เข้ากันกับ hadoop-aws-3.3.x)
+      HADOOP_CLASSPATH: /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
       METASTORE_AUX_JARS_PATH: /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
+
     volumes:
-      - ./metastore_conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml:ro
+      # ---------- Hive/ Hadoop conf ----------
+      # ใช้ hive-site.xml เพื่อชี้ Postgres ไม่ให้ fallback ไป Derby
+      - ./metastore_conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+
+      # core-site.xml สำหรับ s3a:// (fs.s3a.endpoint, ฯลฯ)
       - ./metastore_conf/core-site.xml:/opt/hive/conf/core-site.xml:ro
       - ./metastore_conf/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
 
+      # ---------- JDBC driver ----------
       - ./jars/postgresql-42.7.3.jar:/opt/hive/lib/postgres.jar:ro
+
+      # ---------- S3 Jars ----------
       - ./jars/hadoop-aws.jar:/opt/hive/lib/hadoop-aws.jar:ro
-      - ./jars/aws-sdk-bundle.jar:/opt/hive/lib/aws-sdk-bundle.jar:ro
+      - ./jars/aws-sdk-bundle.jar:/opt/hive/lib/aws-sdk-bundle.jar:ro   # <- คือ aws-java-sdk-bundle
+
     command: >
-      bash -lc "schematool -dbType postgres -initOrUpgradeSchema || true &&
-                /opt/hive/bin/hive --service metastore"
+      bash -lc "
+        schematool -dbType postgres -initOrUpgradeSchema || true &&
+        /opt/hive/bin/hive --service metastore
+      "
+
     healthcheck:
       test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/9083'"]
       interval: 5s
       timeout: 3s
       retries: 40
+
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_started
+
     networks: [trino-network]
 
   # ---------- MinIO (S3-compatible) ----------
