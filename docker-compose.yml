@@ -2,17 +2,19 @@ version: "3.9"
 
 # ---------- Airflow anchor (ใช้ร่วมในหลาย services) ----------
 x-airflow-common: &airflow-common
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.4}
+  build:
+    context: .
+    dockerfile: ./Dockerfile
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'   # เคลียร์ UI
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-apache-spark
-    # AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    TZ: UTC                                  # ให้เวลาคงที่
+    # ลบ _PIP_ADDITIONAL_REQUIREMENTS ออก (ไปติดตั้งใน Dockerfile/requirements.txt แทน)
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
@@ -26,82 +28,23 @@ x-airflow-common: &airflow-common
     - trino-network
 
 services:
-  # ---------- Postgres สำหรับ Hive Metastore ----------
-  postgres:
-    image: postgres:15
-    hostname: postgres
-    ports: ["5432:5432"]
+  # ---------- Project Nessie (แทน Hive Metastore) ----------
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.90.4
+    hostname: nessie
+    ports:
+      - "19120:19120"           # REST API + UI
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: metastore_db
+      QUARKUS_HTTP_PORT: 19120
+      NESSIE_VERSION_STORE_TYPE: ROCKSDB  # เก็บ metadata แบบฝังไฟล์ เหมาะกับ local/dev
+      NESSIE_UI_ENABLED: "true"
     volumes:
-      - ./postgres-data:/var/lib/postgresql/data
+      - ./nessie-data:/nessie   # เก็บข้อมูลของ Nessie (RocksDB)
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d metastore_db"]
-      interval: 5s
+      test: ["CMD", "curl", "-sf", "http://localhost:19120/api/v2/config"]
+      interval: 10s
       timeout: 3s
-      retries: 20
-    networks: [trino-network]
-
-  # ---------- Hive Metastore ----------
-  hive-metastore:
-    image: apache/hive:3.1.3
-    hostname: hive-metastore
-    ports: ["9083:9083"]
-    environment:
-      SERVICE_NAME: metastore
-      DB_DRIVER: postgres
-      # ให้ Hive อ่านไฟล์คอนฟิกจาก /opt/hive/conf
-      HIVE_CONF_DIR: /opt/hive/conf
-      HADOOP_CONF_DIR: /opt/hive/conf
-
-      # (ถ้าต้องใช้ MinIO/S3A)
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test12334567
-      AWS_REGION: us-east-1
-      AWS_EC2_METADATA_DISABLED: "true"
-
-      # ใส่ JAR ที่จำเป็นให้ metastore เห็น
-      # - hadoop-aws-3.3.4.jar  (ต้อง match Hadoop ของ image: 3.3.4)
-      # - aws-java-sdk-bundle-1.12.772.jar (SDK v1 ที่เข้ากันกับ hadoop-aws-3.3.x)
-      HADOOP_CLASSPATH: /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
-      METASTORE_AUX_JARS_PATH: /opt/hive/lib/hadoop-aws.jar:/opt/hive/lib/aws-sdk-bundle.jar
-
-    volumes:
-      # ---------- Hive/ Hadoop conf ----------
-      # ใช้ hive-site.xml เพื่อชี้ Postgres ไม่ให้ fallback ไป Derby
-      - ./metastore_conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
-
-      # core-site.xml สำหรับ s3a:// (fs.s3a.endpoint, ฯลฯ)
-      - ./metastore_conf/core-site.xml:/opt/hive/conf/core-site.xml:ro
-      - ./metastore_conf/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
-
-      # ---------- JDBC driver ----------
-      - ./jars/postgresql-42.7.3.jar:/opt/hive/lib/postgres.jar:ro
-
-      # ---------- S3 Jars ----------
-      - ./jars/hadoop-aws.jar:/opt/hive/lib/hadoop-aws.jar:ro
-      - ./jars/aws-sdk-bundle.jar:/opt/hive/lib/aws-sdk-bundle.jar:ro   # <- คือ aws-java-sdk-bundle
-
-    command: >
-      bash -lc "
-        schematool -dbType postgres -initOrUpgradeSchema || true &&
-        /opt/hive/bin/hive --service metastore
-      "
-
-    healthcheck:
-      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/9083'"]
-      interval: 5s
-      timeout: 3s
-      retries: 40
-
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_started
-
+      retries: 30
     networks: [trino-network]
 
   # ---------- MinIO (S3-compatible) ----------
@@ -145,12 +88,12 @@ services:
   trino:
     image: trinodb/trino:476
     hostname: trino_container
-    ports: ["8080:8080"]   # จอง 8080 ให้ Trino ตามที่ระบุ
+    ports: ["8080:8080"]
     volumes:
       - ./trino/catalog:/etc/trino/catalog
       - ./trino/etc/jvm.config:/etc/trino/jvm.config:ro
     depends_on:
-      hive-metastore:
+      nessie:
         condition: service_healthy
       minio:
         condition: service_started
@@ -209,7 +152,6 @@ services:
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
-      _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
@@ -219,7 +161,7 @@ services:
     <<: *airflow-common
     command: webserver
     ports:
-      - "8081:8080"   # เปลี่ยนมาใช้ 8081 บนโฮสต์ เพื่อไม่ชนกับ Trino
+      - "8081:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -264,7 +206,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # ---------- Airflow CLI (optional, โหมดดีบั๊ก) ----------
+  # ---------- Airflow CLI (optional) ----------
   airflow-cli:
     <<: *airflow-common
     profiles: ["debug"]
@@ -273,49 +215,52 @@ services:
       CONNECTION_CHECK_MAX_COUNT: "0"
     command: ["bash", "-c", "airflow"]
 
+  # ---------- Spark ----------
   spark:
     image: bitnami/spark:3.5
     hostname: spark
     user: root
     depends_on:
-      hive-metastore:
+      nessie:
         condition: service_healthy
       minio:
         condition: service_started
     environment:
+      TZ: UTC
       SPARK_MODE: master
       SPARK_MASTER_HOST: spark
+      SPARK_EXTRA_CLASSPATH: /opt/bitnami/spark/extra-jars/iceberg-spark-runtime.jar:/opt/bitnami/spark/extra-jars/hadoop-aws.jar:/opt/bitnami/spark/extra-jars/aws-java-sdk-bundle-1.12.262.jar
     ports:
-      - "8082:8080"   # Master UI
-      - "4040:4040"   # App UI ของงานแรก (เพราะเราจะ exec งานจาก container นี้)
+      - "8082:8080"
+      - "4040:4040"
     volumes:
-      - ./spark/conf:/opt/bitnami/spark/conf         # << RW (เอา :ro ออก)
-      - ./jars/iceberg-spark-runtime.jar:/opt/bitnami/spark/jars/iceberg-spark-runtime.jar:ro
-      - ./jars/hadoop-aws.jar:/opt/bitnami/spark/jars/hadoop-aws.jar:ro
-      # - ./jars/aws-sdk-bundle.jar:/opt/bitnami/spark/jars/aws-sdk-bundle.jar:ro # Already has in spark image
+      - ./spark/conf:/opt/bitnami/spark/conf
+      - ./jars:/opt/bitnami/spark/extra-jars:ro
       - ./spark/jobs:/opt/bitnami/spark/jobs
     networks: [trino-network]
+    restart: unless-stopped
 
   spark-worker-1:
     image: bitnami/spark:3.5
     hostname: spark-worker-1
     user: root
     environment:
+      TZ: UTC
       SPARK_MODE: worker
-      SPARK_WORKER_CORES: 1          # ปรับตามเครื่อง
-      SPARK_WORKER_MEMORY: 2G        # ปรับตามเครื่อง (เช่น 2G, 4G)
+      SPARK_WORKER_CORES: 1
+      SPARK_WORKER_MEMORY: 2G
       SPARK_MASTER_URL: spark://spark:7077
+      SPARK_EXTRA_CLASSPATH: /opt/bitnami/spark/extra-jars/iceberg-spark-runtime.jar:/opt/bitnami/spark/extra-jars/hadoop-aws.jar:/opt/bitnami/spark/extra-jars/aws-java-sdk-bundle-1.12.262.jar
     depends_on:
       spark:
         condition: service_started
     ports:
-      - "8083:8081"                  # Worker UI
+      - "8083:8081"
     volumes:
-      - ./spark/conf:/opt/bitnami/spark/conf         # << RW (เอา :ro ออก)
-      - ./jars/iceberg-spark-runtime.jar:/opt/bitnami/spark/jars/iceberg-spark-runtime.jar:ro
-      - ./jars/hadoop-aws.jar:/opt/bitnami/spark/jars/hadoop-aws.jar:ro
-      # - ./jars/aws-sdk-bundle.jar:/opt/bitnami/spark/jars/aws-sdk-bundle.jar:ro # Already has in spark image
+      - ./spark/conf:/opt/bitnami/spark/conf
+      - ./jars:/opt/bitnami/spark/extra-jars:ro
     networks: [trino-network]
+    restart: unless-stopped
 
 networks:
   trino-network:
